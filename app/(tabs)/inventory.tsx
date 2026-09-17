@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
 
   // Preview
   previewOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill as any,
     justifyContent: 'flex-end',
     padding: Spacing.lg,
     paddingBottom: 50,
