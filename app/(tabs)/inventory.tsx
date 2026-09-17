@@ -14,6 +14,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize } from '@/constants/Theme';
+import { analyzeInventoryImage } from '@/services/aiService';
 
 export default function InventoryScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -60,43 +61,8 @@ export default function InventoryScreen() {
   const analyzePhoto = async (b64: string) => {
     setIsAnalyzing(true);
     try {
-      const apiKey = await AsyncStorage.getItem('openai_api_key');
-      if (!apiKey || apiKey.trim().length < 10) {
-        Alert.alert('API Key Missing', 'Go to Settings tab and enter your OpenAI API key first.');
-        setMode('list');
-        setPhoto(null);
-        setIsAnalyzing(false);
-        return;
-      }
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Identify all valuable objects in this image (electronics, appliances, furniture, etc). Return ONLY valid JSON array: [{"name":"item","category":"category","estimated_value":0}]. No markdown.',
-                },
-                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${b64}` } },
-              ],
-            },
-          ],
-          max_tokens: 500,
-        }),
-      });
-
-      const json = await response.json();
-      if (json.error) throw new Error(json.error.message);
-      const content = json.choices[0].message.content.trim();
-      setScannedItems(JSON.parse(content));
+      const items = await analyzeInventoryImage(b64);
+      setScannedItems(items);
     } catch (e: any) {
       Alert.alert('Analysis Failed', e.message);
       setMode('list');

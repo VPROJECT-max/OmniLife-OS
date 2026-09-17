@@ -15,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, FontSize } from '@/constants/Theme';
+import { analyzeFoodImage } from '@/services/aiService';
 
 type MacroResult = {
   name: string;
@@ -89,50 +90,8 @@ export default function HealthScreen() {
   const analyzePhoto = async (b64: string) => {
     setIsAnalyzing(true);
     try {
-      const apiKey = await AsyncStorage.getItem('openai_api_key');
-      if (!apiKey || apiKey.trim().length < 10) {
-        Alert.alert(
-          'API Key Missing',
-          'Go to Settings tab and enter your OpenAI API key first.',
-          [{ text: 'OK', onPress: () => { setMode('menu'); setPhoto(null); } }]
-        );
-        setIsAnalyzing(false);
-        return;
-      }
-
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Analyze this food image. Identify the dish name and estimate calories, protein (g), carbs (g), fat (g). Return ONLY valid JSON: {"name":"dish name","calories":0,"protein":0,"carbs":0,"fat":0}. No markdown.',
-                },
-                {
-                  type: 'image_url',
-                  image_url: { url: `data:image/jpeg;base64,${b64}` },
-                },
-              ],
-            },
-          ],
-          max_tokens: 200,
-        }),
-      });
-
-      const json = await response.json();
-      if (json.error) throw new Error(json.error.message);
-
-      const content = json.choices[0].message.content.trim();
-      const parsed = JSON.parse(content);
-      setMacros(parsed);
+      const result = await analyzeFoodImage(b64);
+      setMacros(result);
     } catch (e: any) {
       Alert.alert('Analysis Failed', e.message || 'Could not analyze the image.');
       setMode('menu');
