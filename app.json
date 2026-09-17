@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "personal-life-os",
+    "name": "OmniLife OS",
     "slug": "personal-life-os",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/omnilife-icon.jpg",
     "scheme": "personallifeos",
     "userInterfaceStyle": "automatic",
     "ios": {
