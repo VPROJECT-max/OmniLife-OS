@@ -1,12 +1,66 @@
 /**
  * OmniLife OS - AI Vision Service
- * Supports: OpenAI (GPT-4o), Google Gemini (gemini-2.0-flash, gemini-1.5-pro)
- * Version 1.2.0
+ * Supports: OpenAI (GPT-5.6 Sol/Terra/Luna, GPT-6 Astra), Google Gemini (3.7 Flash, 3.6 Flash)
+ * Version 1.3.0 — Updated September 2026
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type AIProvider = 'openai' | 'gemini';
+
+export type ModelOption = {
+  id: string;
+  label: string;
+  description: string;
+  badge?: string; // e.g. "Fastest", "Best", "Recommended"
+};
+
+export const OPENAI_MODELS: ModelOption[] = [
+  {
+    id: 'gpt-5.6-sol',
+    label: 'GPT-5.6 Sol',
+    description: 'Flagship — best accuracy & reasoning',
+    badge: 'Best',
+  },
+  {
+    id: 'gpt-5.6-terra',
+    label: 'GPT-5.6 Terra',
+    description: 'Balanced — great accuracy, lower cost',
+    badge: 'Recommended',
+  },
+  {
+    id: 'gpt-5.6-luna',
+    label: 'GPT-5.6 Luna',
+    description: 'Cost-efficient — fast & affordable',
+    badge: 'Cheapest',
+  },
+  {
+    id: 'gpt-6-astra',
+    label: 'GPT-6 Astra',
+    description: 'Cutting-edge — complex reasoning & tasks',
+    badge: 'Newest',
+  },
+];
+
+export const GEMINI_MODELS: ModelOption[] = [
+  {
+    id: 'gemini-3.7-flash',
+    label: 'Gemini 3.7 Flash',
+    description: 'Best for agentic tasks, coding & vision',
+    badge: 'Recommended',
+  },
+  {
+    id: 'gemini-3.6-flash',
+    label: 'Gemini 3.6 Flash',
+    description: 'Token-efficient & cost-effective',
+    badge: 'Cheapest',
+  },
+];
+
+export const DEFAULT_MODELS: Record<AIProvider, string> = {
+  openai: 'gpt-5.6-terra',
+  gemini: 'gemini-3.7-flash',
+};
 
 export type FoodAnalysisResult = {
   name: string;
@@ -22,25 +76,34 @@ export type InventoryItem = {
   estimated_value: number;
 };
 
-/** Load active provider from storage */
+// ─────────────────────────────────────────────────────────────
+// STORAGE HELPERS
+// ─────────────────────────────────────────────────────────────
+
 export async function getActiveProvider(): Promise<AIProvider> {
   const p = await AsyncStorage.getItem('ai_provider');
   return (p as AIProvider) || 'openai';
 }
 
-/** Load API key for a specific provider */
 export async function getApiKey(provider: AIProvider): Promise<string | null> {
   return AsyncStorage.getItem(`api_key_${provider}`);
 }
 
-/** Save API key for a specific provider */
 export async function saveApiKey(provider: AIProvider, key: string): Promise<void> {
   await AsyncStorage.setItem(`api_key_${provider}`, key.trim());
 }
 
-/** Save active provider choice */
 export async function saveProvider(provider: AIProvider): Promise<void> {
   await AsyncStorage.setItem('ai_provider', provider);
+}
+
+export async function getActiveModel(provider: AIProvider): Promise<string> {
+  const m = await AsyncStorage.getItem(`ai_model_${provider}`);
+  return m || DEFAULT_MODELS[provider];
+}
+
+export async function saveModel(provider: AIProvider, modelId: string): Promise<void> {
+  await AsyncStorage.setItem(`ai_model_${provider}`, modelId);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -50,23 +113,23 @@ export async function saveProvider(provider: AIProvider): Promise<void> {
 export async function analyzeFoodImage(base64Image: string): Promise<FoodAnalysisResult> {
   const provider = await getActiveProvider();
   const apiKey = await getApiKey(provider);
+  const model = await getActiveModel(provider);
 
   if (!apiKey || apiKey.trim().length < 8) {
     throw new Error(`No API key set for ${getProviderLabel(provider)}. Go to Settings → AI Provider.`);
   }
 
-  if (provider === 'openai') return analyzeFoodOpenAI(base64Image, apiKey);
-  if (provider === 'gemini') return analyzeFoodGemini(base64Image, apiKey);
-
+  if (provider === 'openai') return analyzeFoodOpenAI(base64Image, apiKey, model);
+  if (provider === 'gemini') return analyzeFoodGemini(base64Image, apiKey, model);
   throw new Error('Unknown AI provider');
 }
 
-async function analyzeFoodOpenAI(base64: string, apiKey: string): Promise<FoodAnalysisResult> {
+async function analyzeFoodOpenAI(base64: string, apiKey: string, model: string): Promise<FoodAnalysisResult> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [
         {
           role: 'user',
@@ -83,14 +146,12 @@ async function analyzeFoodOpenAI(base64: string, apiKey: string): Promise<FoodAn
     }),
   });
   const json = await res.json();
-  if (json.error) throw new Error(`OpenAI: ${json.error.message}`);
+  if (json.error) throw new Error(`OpenAI (${model}): ${json.error.message}`);
   return JSON.parse(json.choices[0].message.content.trim());
 }
 
-async function analyzeFoodGemini(base64: string, apiKey: string): Promise<FoodAnalysisResult> {
-  const model = 'gemini-2.0-flash';
+async function analyzeFoodGemini(base64: string, apiKey: string, model: string): Promise<FoodAnalysisResult> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -109,9 +170,8 @@ async function analyzeFoodGemini(base64: string, apiKey: string): Promise<FoodAn
     }),
   });
   const json = await res.json();
-  if (json.error) throw new Error(`Gemini: ${json.error.message}`);
-  const text = json.candidates[0].content.parts[0].text.trim();
-  return JSON.parse(text);
+  if (json.error) throw new Error(`Gemini (${model}): ${json.error.message}`);
+  return JSON.parse(json.candidates[0].content.parts[0].text.trim());
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -121,23 +181,23 @@ async function analyzeFoodGemini(base64: string, apiKey: string): Promise<FoodAn
 export async function analyzeInventoryImage(base64Image: string): Promise<InventoryItem[]> {
   const provider = await getActiveProvider();
   const apiKey = await getApiKey(provider);
+  const model = await getActiveModel(provider);
 
   if (!apiKey || apiKey.trim().length < 8) {
     throw new Error(`No API key set for ${getProviderLabel(provider)}. Go to Settings → AI Provider.`);
   }
 
-  if (provider === 'openai') return analyzeInventoryOpenAI(base64Image, apiKey);
-  if (provider === 'gemini') return analyzeInventoryGemini(base64Image, apiKey);
-
+  if (provider === 'openai') return analyzeInventoryOpenAI(base64Image, apiKey, model);
+  if (provider === 'gemini') return analyzeInventoryGemini(base64Image, apiKey, model);
   throw new Error('Unknown AI provider');
 }
 
-async function analyzeInventoryOpenAI(base64: string, apiKey: string): Promise<InventoryItem[]> {
+async function analyzeInventoryOpenAI(base64: string, apiKey: string, model: string): Promise<InventoryItem[]> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model,
       messages: [
         {
           role: 'user',
@@ -154,14 +214,12 @@ async function analyzeInventoryOpenAI(base64: string, apiKey: string): Promise<I
     }),
   });
   const json = await res.json();
-  if (json.error) throw new Error(`OpenAI: ${json.error.message}`);
+  if (json.error) throw new Error(`OpenAI (${model}): ${json.error.message}`);
   return JSON.parse(json.choices[0].message.content.trim());
 }
 
-async function analyzeInventoryGemini(base64: string, apiKey: string): Promise<InventoryItem[]> {
-  const model = 'gemini-2.0-flash';
+async function analyzeInventoryGemini(base64: string, apiKey: string, model: string): Promise<InventoryItem[]> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -180,9 +238,8 @@ async function analyzeInventoryGemini(base64: string, apiKey: string): Promise<I
     }),
   });
   const json = await res.json();
-  if (json.error) throw new Error(`Gemini: ${json.error.message}`);
-  const text = json.candidates[0].content.parts[0].text.trim();
-  return JSON.parse(text);
+  if (json.error) throw new Error(`Gemini (${model}): ${json.error.message}`);
+  return JSON.parse(json.candidates[0].content.parts[0].text.trim());
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -190,25 +247,20 @@ async function analyzeInventoryGemini(base64: string, apiKey: string): Promise<I
 // ─────────────────────────────────────────────────────────────
 
 export function getProviderLabel(provider: AIProvider): string {
-  const labels: Record<AIProvider, string> = {
-    openai: 'OpenAI (GPT-4o)',
-    gemini: 'Google Gemini',
-  };
-  return labels[provider] || provider;
+  return { openai: 'OpenAI', gemini: 'Google Gemini' }[provider] || provider;
 }
 
 export function getProviderKeyHint(provider: AIProvider): string {
-  const hints: Record<AIProvider, string> = {
-    openai: 'sk-...',
-    gemini: 'AIza...',
-  };
-  return hints[provider] || 'Enter API key...';
+  return { openai: 'sk-...', gemini: 'AIza...' }[provider] || 'Enter API key...';
 }
 
 export function getProviderDocsUrl(provider: AIProvider): string {
-  const urls: Record<AIProvider, string> = {
+  return {
     openai: 'platform.openai.com/api-keys',
     gemini: 'aistudio.google.com/app/apikey',
-  };
-  return urls[provider] || '';
+  }[provider] || '';
+}
+
+export function getModelsForProvider(provider: AIProvider): ModelOption[] {
+  return { openai: OPENAI_MODELS, gemini: GEMINI_MODELS }[provider] || [];
 }
