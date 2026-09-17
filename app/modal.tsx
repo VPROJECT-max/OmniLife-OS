@@ -7,7 +7,7 @@ import { Text, View } from '@/components/Themed';
 
 export default function SettingsModalScreen() {
   const [apiKey, setApiKey] = useState('');
-  const version = Constants.expoConfig?.version || '1.0.0';
+  const version = Constants.expoConfig?.version || '1.0.1';
 
   useEffect(() => {
     const loadKey = async () => {
